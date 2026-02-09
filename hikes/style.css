@@ -1,0 +1,203 @@
+:root {
+    --primary-color: #3b82f6;
+    /* Blue 500 */
+    --text-color: #1e293b;
+    /* Slate 800 */
+    --secondary-text: #64748b;
+    /* Slate 500 */
+    --bg-color: #f8fafc;
+    /* Slate 50 */
+    --card-bg: rgba(255, 255, 255, 0.75);
+    /* More translucent for glass effect */
+    --border-color: #e2e8f0;
+    /* Slate 200 */
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --text-color: #f1f5f9;
+        /* Slate 100 */
+        --secondary-text: #94a3b8;
+        /* Slate 400 */
+        --bg-color: #0f172a;
+        /* Slate 900 */
+        --card-bg: rgba(30, 41, 59, 0.75);
+        /* More translucent for glass effect */
+        --border-color: #334155;
+        /* Slate 700 */
+        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Invert close button to make it white in dark mode */
+    .gm-style button.gm-ui-hover-effect {
+        filter: invert(1) !important;
+    }
+
+    /* Ensure native header (Date) and content text colors are correct */
+    .gm-style .gm-style-iw-d {
+        color: var(--text-color) !important;
+        overflow: hidden !important;
+        /* Hide scrollbars */
+    }
+}
+
+/* Global Glassmorphism for InfoWindow (Light & Dark) */
+.gm-style .gm-style-iw-c {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--border-color);
+}
+
+.gm-style .gm-style-iw-tc::after {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+#map {
+    height: 100%;
+    width: 100%;
+}
+
+/* Minimal Marker Styles */
+.custom-marker {
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.custom-marker:hover {
+    transform: scale(1.1);
+    z-index: 10;
+}
+
+/* Target the Google Maps custom element directly for the marker shape/style */
+gmp-advanced-marker {
+    background: rgba(59, 130, 246, 0.1);
+    /* Much more translucent for blur */
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    border: 2px solid white;
+    box-shadow: var(--shadow);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: box-shadow 0.3s ease;
+    /* Do not transition 'all' or 'transform' */
+}
+
+gmp-advanced-marker:hover {
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.9), var(--shadow);
+    z-index: 999;
+    /* Ensure hovered marker is on top */
+}
+
+/* Active state (when InfoWindow is open) - mirrors hover state */
+gmp-advanced-marker.marker-active {
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.9), var(--shadow);
+    z-index: 999;
+}
+
+gmp-advanced-marker.marker-active .marker-content {
+    transform: scale(1.2);
+}
+
+/* Scale the emoji inside instead to avoid messing with map element transform */
+gmp-advanced-marker:hover .marker-content {
+    transform: scale(1.2);
+    transition: transform 0.3s ease;
+}
+
+.marker-content {
+    /* Just the text styling now */
+    color: white;
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: transform 0.3s ease;
+}
+
+/* Arrow indicator removed */
+
+/* InfoWindow Styles */
+.info-window-content {
+    padding: 0 4px 4px 4px;
+    /* Reduced top padding as header takes space */
+    min-width: 200px;
+    margin-right: 12px;
+    margin-bottom: 12px;
+}
+
+.info-header-body {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.info-park {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.info-trail {
+    font-size: 0.9rem;
+    color: var(--text-color);
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+.info-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    /* 2 columns */
+    column-gap: 16px;
+    row-gap: 8px;
+    font-size: 0.85rem;
+    color: var(--secondary-text);
+}
+
+.info-stat {
+    display: flex;
+    flex-direction: column;
+    /* Stack label and value or keep side-by-side depending on preference. Keeping simple flex row here or block. */
+    /* Let's try stacking label above or simple key-value pairs. */
+    /* Keeping original flex but maybe wrapped or just grid item */
+    align-items: flex-start;
+    gap: 2px;
+}
+
+.info-stat strong {
+    color: var(--primary-color);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.info-stat span {
+    font-weight: 500;
+    color: var(--text-color);
+}
