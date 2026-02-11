@@ -227,29 +227,37 @@ async function initMap() {
     const { Map, InfoWindow } = await google.maps.importLibrary("maps");
     const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
 
-    // Center map on the first location or default to NYC if empty
-    const center = locations.length > 0 ? { lat: locations[0].lat, lng: locations[0].lng } : { lat: 40.7580, lng: -73.9855 };
+    // Center map on the SF Bay Area
+    const center = { lat: 37.36, lng: -122.04 };
 
     map = new Map(document.getElementById("map"), {
         center: center,
-        zoom: 12,
+        zoom: 11,
         mapId: "4504f8b37365c3d0",
         colorScheme: "FOLLOW_SYSTEM", // Use string literal due to import issue with ColorScheme
         disableDefaultUI: false,
         zoomControl: true,
-        mapTypeControl: false,
+        mapTypeControl: true,
         streetViewControl: false,
         fullscreenControl: false,
         clickableIcons: false, // Disable native POI clicks
+        mapTypeId: 'terrain',
     });
 
     const infoWindow = new InfoWindow();
+
+    // Track currently displayed polyline
+    let currentPolyline = null;
     let currentActiveMarkerElement = null;
 
     const deactivateCurrentMarker = () => {
         if (currentActiveMarkerElement) {
             currentActiveMarkerElement.classList.remove('marker-active');
             currentActiveMarkerElement = null;
+        }
+        if (currentPolyline) {
+            currentPolyline.setMap(null);
+            currentPolyline = null;
         }
     };
 
@@ -276,7 +284,6 @@ async function initMap() {
 
     Object.values(groupedLocations).forEach((hikes) => {
         // Sort hikes by date descending (newest first)
-        // Assuming rawDate is a number (Google Sheets date serial) or string comparable
         hikes.sort((a, b) => {
             if (typeof a.rawDate === 'number' && typeof b.rawDate === 'number') {
                 return b.rawDate - a.rawDate;
@@ -298,9 +305,35 @@ async function initMap() {
         });
 
         // Add click listener
-        marker.addListener('click', () => {
+        marker.addListener('click', async () => {
+
+            // Function to handle clicking on a specific hike in the list
+            const handleHikeClick = async (hike) => {
+                const gpxUrl = getGPXFilename(hike.date);
+                if (gpxUrl) {
+                    // Clear existing
+                    if (currentPolyline) {
+                        currentPolyline.setMap(null);
+                        currentPolyline = null;
+                    }
+
+                    const pathData = await loadGPX(gpxUrl);
+                    if (pathData && pathData.length > 0) {
+                        currentPolyline = new google.maps.Polyline({
+                            path: pathData,
+                            geodesic: true,
+                            strokeColor: "#1E90FF",
+                            strokeOpacity: 0.75,
+                            strokeWeight: 4,
+                            map: map
+                        });
+                    }
+                }
+            };
+
             // Pass ALL hikes for this location to the info window builder
-            const content = buildInfoWindowContent(hikes);
+            // AND pass the click handler
+            const content = buildInfoWindowContent(hikes, handleHikeClick);
 
             // Deactivate previous
             deactivateCurrentMarker();
@@ -321,8 +354,76 @@ async function initMap() {
                 anchor: marker,
                 map,
             });
+
+            // Automatically load the primary (most recent) hike's path initially
+            handleHikeClick(primaryLoc);
         });
     });
+}
+
+// Global cache for parsed GPX data
+const gpxCache = {};
+
+/**
+ * Returns the relative path to the GPX file based on the date string.
+ * Formats date to yyyymmdd.gpx
+ */
+function getGPXFilename(dateString) {
+    if (!dateString) return null;
+
+    // Try to parse the date string (e.g. "2/6/2026", "2026-02-06", "Feb 6, 2026")
+    const date = new Date(dateString);
+
+    if (isNaN(date.getTime())) {
+        console.warn("Invalid date for GPX filename:", dateString);
+        return null;
+    }
+
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+
+    return `gpx/${yyyy}${mm}${dd}.gpx`;
+}
+
+/**
+ * Fetches and parses a GPX file.
+ * Returns an array of {lat, lng} objects or null.
+ */
+async function loadGPX(url) {
+    if (gpxCache[url]) {
+        return gpxCache[url];
+    }
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            if (response.status !== 404) {
+                console.warn(`Failed to load GPX: ${url}`, response.status);
+            }
+            gpxCache[url] = null; // cached failure to avoid retry
+            return null;
+        }
+
+        const str = await response.text();
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(str, "text/xml");
+        const trkpts = xmlDoc.getElementsByTagName("trkpt");
+
+        const path = [];
+        for (let i = 0; i < trkpts.length; i++) {
+            const lat = parseFloat(trkpts[i].getAttribute("lat"));
+            const lon = parseFloat(trkpts[i].getAttribute("lon"));
+            path.push({ lat, lng: lon });
+        }
+
+        gpxCache[url] = path;
+        return path;
+    } catch (err) {
+        console.error("Error parsing GPX:", err);
+        gpxCache[url] = null;
+        return null;
+    }
 }
 
 /**
@@ -347,26 +448,45 @@ function buildMarkerContent(data) {
  * Builds the HTML for the InfoWindow popup
  * Now accepts an array of hike objects
  */
-function buildInfoWindowContent(data) {
+/**
+ * Builds the HTML for the InfoWindow popup
+ * Now accepts an array of hike objects and a callback for clicks
+ */
+function buildInfoWindowContent(data, onHikeClick) {
     // Ensure data is an array
     const hikes = Array.isArray(data) ? data : [data];
-    const isMultiple = hikes.length > 1;
 
     const div = document.createElement('div');
     div.className = 'info-window-content';
 
-    // If multiple hikes, we might want a scrollable container if there are many
-    // But for now, just stack them.
-
-    let html = '';
-
     hikes.forEach((hike, index) => {
-        // Add separator if not first
+        // Create container for each hike
+        const entryDiv = document.createElement('div');
+        entryDiv.className = 'hike-entry';
+
+        // Add separator if not first (managed via CSS or check index)
         if (index > 0) {
-            html += '<hr style="border: 0; border-top: 1px solid var(--border-color); margin: 12px 0;">';
+            entryDiv.style.borderTop = "1px solid var(--border-color)";
+            entryDiv.style.marginTop = "12px";
+            entryDiv.style.paddingTop = "12px";
         }
 
-        html += `<div class="hike-entry">`;
+        // Add click listener if callback provided
+        if (onHikeClick) {
+            entryDiv.style.cursor = "pointer";
+            entryDiv.title = "Click to show this hike's path";
+            entryDiv.addEventListener('click', (e) => {
+                // Prevent bubbling if needed, though for now we want the row clickable
+                onHikeClick(hike);
+
+                // Visual feedback - highlight selected
+                const allEntries = div.querySelectorAll('.hike-entry');
+                allEntries.forEach(el => el.style.backgroundColor = 'transparent');
+                entryDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+            });
+        }
+
+        let html = '';
 
         // Date is now the primary label for each hike entry
         html += `<div style="font-weight: 700; color: var(--text-color); margin-bottom: 4px;">${hike.date}</div>`;
@@ -398,10 +518,10 @@ function buildInfoWindowContent(data) {
             </div>
         `;
 
-        html += `</div>`;
+        entryDiv.innerHTML = html;
+        div.appendChild(entryDiv);
     });
 
-    div.innerHTML = html;
     return div;
 }
 
