@@ -282,6 +282,8 @@ async function initMap() {
         groupedLocations[key].push(loc);
     });
 
+    const dateToMarkerInfo = {};
+
     Object.values(groupedLocations).forEach((hikes) => {
         // Sort hikes by date descending (newest first)
         hikes.sort((a, b) => {
@@ -304,11 +306,15 @@ async function initMap() {
             title: primaryLoc.park || primaryLoc.title,
         });
 
-        // Add click listener
-        marker.addListener('click', async () => {
-
+        const openInfoWindowForHike = (targetHike) => {
             // Function to handle clicking on a specific hike in the list
             const handleHikeClick = async (hike) => {
+                const yyyymmdd = formatDateAsYYYYMMDD(hike.date);
+                if (yyyymmdd) {
+                    // Update URL fragment
+                    history.replaceState(null, null, '#' + yyyymmdd);
+                }
+
                 const gpxUrl = getGPXFilename(hike.date);
                 if (gpxUrl) {
                     // Clear existing
@@ -355,35 +361,58 @@ async function initMap() {
                 map,
             });
 
-            // Automatically load the primary (most recent) hike's path initially
-            handleHikeClick(primaryLoc);
+            // Automatically load the target hike's path initially
+            handleHikeClick(targetHike);
+        };
+
+        // Add click listener
+        marker.addListener('click', async () => {
+            openInfoWindowForHike(primaryLoc);
+        });
+
+        hikes.forEach(hike => {
+            const yyyymmdd = formatDateAsYYYYMMDD(hike.date);
+            if (yyyymmdd) {
+                dateToMarkerInfo[yyyymmdd] = {
+                    open: () => openInfoWindowForHike(hike),
+                    hike: hike
+                };
+            }
         });
     });
+
+    // Check hash on load
+    const hash = window.location.hash.replace('#', '');
+    if (hash && dateToMarkerInfo[hash]) {
+        dateToMarkerInfo[hash].open();
+        map.setCenter({ lat: dateToMarkerInfo[hash].hike.lat, lng: dateToMarkerInfo[hash].hike.lng });
+    }
 }
 
 // Global cache for parsed GPX data
 const gpxCache = {};
 
 /**
- * Returns the relative path to the GPX file based on the date string.
- * Formats date to yyyymmdd.gpx
+ * Formats a date string to yyyymmdd.
  */
-function getGPXFilename(dateString) {
+function formatDateAsYYYYMMDD(dateString) {
     if (!dateString) return null;
-
-    // Try to parse the date string (e.g. "2/6/2026", "2026-02-06", "Feb 6, 2026")
     const date = new Date(dateString);
-
-    if (isNaN(date.getTime())) {
-        console.warn("Invalid date for GPX filename:", dateString);
-        return null;
-    }
+    if (isNaN(date.getTime())) return null;
 
     const yyyy = date.getFullYear();
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}${mm}${dd}`;
+}
 
-    return `gpx/${yyyy}${mm}${dd}.gpx`;
+/**
+ * Returns the relative path to the GPX file based on the date string.
+ * Formats date to yyyymmdd.gpx
+ */
+function getGPXFilename(dateString) {
+    const formatted = formatDateAsYYYYMMDD(dateString);
+    return formatted ? `gpx/${formatted}.gpx` : null;
 }
 
 /**
