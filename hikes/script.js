@@ -276,117 +276,169 @@ async function initMap() {
         deactivateCurrentMarker();
     });
 
-    // Group locations by lat/lng to combine multiple hikes at same trailhead
-    const groupedLocations = {};
-    locations.forEach(loc => {
-        const key = `${loc.lat},${loc.lng}`;
-        if (!groupedLocations[key]) {
-            groupedLocations[key] = [];
-        }
-        groupedLocations[key].push(loc);
-    });
-
+    let currentMarkers = [];
     const dateToMarkerInfo = {};
 
-    Object.values(groupedLocations).forEach((hikes) => {
-        // Sort hikes by date descending (newest first)
-        hikes.sort((a, b) => {
-            if (typeof a.rawDate === 'number' && typeof b.rawDate === 'number') {
-                return b.rawDate - a.rawDate;
+    const renderData = (filterType) => {
+        // Close info window and clear paths if filter changes
+        infoWindow.close();
+        deactivateCurrentMarker();
+
+        // Clear existing markers
+        currentMarkers.forEach(m => m.map = null);
+        currentMarkers = [];
+
+        // Clear dateToMarkerInfo map
+        for (const prop of Object.getOwnPropertyNames(dateToMarkerInfo)) {
+             delete dateToMarkerInfo[prop];
+        }
+
+        // Filter locations based on type
+        const filteredLocations = filterType === 'all' ? locations : locations.filter(loc => loc.type === filterType);
+
+        // Group filtered locations by lat/lng to combine multiple hikes at same trailhead
+        const groupedLocations = {};
+        filteredLocations.forEach(loc => {
+            const key = `${loc.lat},${loc.lng}`;
+            if (!groupedLocations[key]) {
+                groupedLocations[key] = [];
             }
-            return 0; // Fallback if regular sort not possible
+            groupedLocations[key].push(loc);
         });
 
-        // Use the most recent hike for the marker position and title
-        const primaryLoc = hikes[0];
-
-        // Marker content now reflects the group, but visually it's the same "Walking Person"
-        const markerContent = buildMarkerContent(primaryLoc);
-
-        const marker = new AdvancedMarkerElement({
-            map,
-            position: { lat: primaryLoc.lat, lng: primaryLoc.lng },
-            content: markerContent,
-            title: primaryLoc.park || primaryLoc.title,
-        });
-
-        const openInfoWindowForHike = (targetHike) => {
-            // Function to handle clicking on a specific hike in the list
-            const handleHikeClick = async (hike) => {
-                const yyyymmdd = formatDateAsYYYYMMDD(hike.date);
-                if (yyyymmdd) {
-                    // Update URL fragment
-                    history.replaceState(null, null, '#' + yyyymmdd);
+        Object.values(groupedLocations).forEach((hikes) => {
+            // Sort hikes by date descending (newest first)
+            hikes.sort((a, b) => {
+                if (typeof a.rawDate === 'number' && typeof b.rawDate === 'number') {
+                    return b.rawDate - a.rawDate;
                 }
-
-                const gpxUrl = getGPXFilename(hike.date);
-                if (gpxUrl) {
-                    // Clear existing
-                    if (currentPolyline) {
-                        currentPolyline.setMap(null);
-                        currentPolyline = null;
-                    }
-
-                    const pathData = await loadGPX(gpxUrl);
-                    if (pathData && pathData.length > 0) {
-                        currentPolyline = new google.maps.Polyline({
-                            path: pathData,
-                            geodesic: true,
-                            strokeColor: "#1E90FF",
-                            strokeOpacity: 0.75,
-                            strokeWeight: 4,
-                            map: map
-                        });
-                    }
-                }
-            };
-
-            // Pass ALL hikes for this location to the info window builder
-            // AND pass the click handler
-            const content = buildInfoWindowContent(hikes, handleHikeClick);
-
-            // Deactivate previous
-            deactivateCurrentMarker();
-
-            // Activate current
-            if (marker.element) {
-                marker.element.classList.add('marker-active');
-                currentActiveMarkerElement = marker.element;
-            }
-
-            if (infoWindow.setHeaderContent) {
-                // Always use Park Name (with Region) as the main header
-                infoWindow.setHeaderContent(primaryLoc.park || "Location");
-            }
-
-            infoWindow.setContent(content);
-            infoWindow.open({
-                anchor: marker,
-                map,
+                return 0; // Fallback if regular sort not possible
             });
 
-            // Automatically load the target hike's path initially
-            handleHikeClick(targetHike);
-        };
+            // Use the most recent hike for the marker position and title
+            const primaryLoc = hikes[0];
 
-        // Add click listener
-        marker.addListener('click', async () => {
-            openInfoWindowForHike(primaryLoc);
-        });
+            // Marker content now reflects the group, but visually it's the same "Walking Person"
+            const markerContent = buildMarkerContent(primaryLoc);
 
-        hikes.forEach(hike => {
-            const yyyymmdd = formatDateAsYYYYMMDD(hike.date);
-            if (yyyymmdd) {
-                dateToMarkerInfo[yyyymmdd] = {
-                    open: () => openInfoWindowForHike(hike),
-                    hike: hike
+            const marker = new AdvancedMarkerElement({
+                map,
+                position: { lat: primaryLoc.lat, lng: primaryLoc.lng },
+                content: markerContent,
+                title: primaryLoc.park || primaryLoc.title,
+            });
+
+            currentMarkers.push(marker);
+
+            const openInfoWindowForHike = (targetHike) => {
+                // Function to handle clicking on a specific hike in the list
+                const handleHikeClick = async (hike) => {
+                    const yyyymmdd = formatDateAsYYYYMMDD(hike.date);
+                    if (yyyymmdd) {
+                        // Update URL fragment
+                        history.replaceState(null, null, '#' + yyyymmdd);
+                    }
+
+                    const gpxUrl = getGPXFilename(hike.date);
+                    if (gpxUrl) {
+                        // Clear existing
+                        if (currentPolyline) {
+                            currentPolyline.setMap(null);
+                            currentPolyline = null;
+                        }
+
+                        const pathData = await loadGPX(gpxUrl);
+                        if (pathData && pathData.length > 0) {
+                            currentPolyline = new google.maps.Polyline({
+                                path: pathData,
+                                geodesic: true,
+                                strokeColor: "#1E90FF",
+                                strokeOpacity: 0.75,
+                                strokeWeight: 4,
+                                map: map
+                            });
+                        }
+                    }
                 };
-            }
+
+                // Pass ALL hikes for this location to the info window builder
+                // AND pass the click handler
+                const content = buildInfoWindowContent(hikes, handleHikeClick);
+
+                // Deactivate previous
+                deactivateCurrentMarker();
+
+                // Activate current
+                if (marker.element) {
+                    marker.element.classList.add('marker-active');
+                    currentActiveMarkerElement = marker.element;
+                }
+
+                if (infoWindow.setHeaderContent) {
+                    // Always use Park Name (with Region) as the main header
+                    infoWindow.setHeaderContent(primaryLoc.park || "Location");
+                }
+
+                infoWindow.setContent(content);
+                infoWindow.open({
+                    anchor: marker,
+                    map,
+                });
+
+                // Automatically load the target hike's path initially
+                handleHikeClick(targetHike);
+            };
+
+            // Add click listener
+            marker.addListener('click', async () => {
+                openInfoWindowForHike(primaryLoc);
+            });
+
+            hikes.forEach(hike => {
+                const yyyymmdd = formatDateAsYYYYMMDD(hike.date);
+                if (yyyymmdd) {
+                    dateToMarkerInfo[yyyymmdd] = {
+                        open: () => openInfoWindowForHike(hike),
+                        hike: hike
+                    };
+                }
+            });
+        });
+    };
+
+    // Filter event listeners
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    filterButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            // Update active class
+            filterButtons.forEach(b => b.classList.remove('active'));
+            const target = e.currentTarget;
+            target.classList.add('active');
+
+            const type = target.dataset.type || 'all';
+            renderData(type);
         });
     });
 
-    // Check hash on load
+    // Check hash on load to determine initial filter and open info window
     const hash = window.location.hash.replace('#', '');
+    let initialFilter = 'all';
+
+    if (hash) {
+        // Find the hike with this date to see if we need to set the filter to something else
+        const targetHike = locations.find(loc => formatDateAsYYYYMMDD(loc.date) === hash);
+        if (targetHike && targetHike.type) {
+             initialFilter = targetHike.type;
+             // Also update active button state
+             filterButtons.forEach(b => b.classList.remove('active'));
+             const matchingBtn = document.querySelector(`.filter-btn[data-type="${initialFilter}"]`);
+             if (matchingBtn) matchingBtn.classList.add('active');
+        }
+    }
+
+    // Initial render
+    renderData(initialFilter);
+
     if (hash && dateToMarkerInfo[hash]) {
         dateToMarkerInfo[hash].open();
         map.setCenter({ lat: dateToMarkerInfo[hash].hike.lat, lng: dateToMarkerInfo[hash].hike.lng });
