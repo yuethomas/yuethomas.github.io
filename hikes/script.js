@@ -279,64 +279,6 @@ async function initMap() {
     let currentMarkers = [];
     const dateToMarkerInfo = {};
 
-    const handleHikeClick = async (hike) => {
-        const yyyymmdd = formatDateAsYYYYMMDD(hike.date);
-        if (yyyymmdd) {
-            // Update URL fragment
-            history.replaceState(null, null, '#' + yyyymmdd);
-        }
-
-        const gpxUrl = getGPXFilename(hike.date);
-        if (gpxUrl) {
-            // Clear existing
-            if (currentPolyline) {
-                currentPolyline.setMap(null);
-                currentPolyline = null;
-            }
-
-            const pathData = await loadGPX(gpxUrl);
-            if (pathData && pathData.length > 0) {
-                currentPolyline = new google.maps.Polyline({
-                    path: pathData,
-                    geodesic: true,
-                    strokeColor: "#1E90FF",
-                    strokeOpacity: 0.75,
-                    strokeWeight: 4,
-                    map: map
-                });
-            }
-        }
-    };
-
-    const openInfoWindowForHike = (targetHike, hikes, marker, primaryLoc) => {
-        // Pass ALL hikes for this location to the info window builder
-        // AND pass the click handler
-        const content = buildInfoWindowContent(hikes, handleHikeClick);
-
-        // Deactivate previous
-        deactivateCurrentMarker();
-
-        // Activate current
-        if (marker.element) {
-            marker.element.classList.add('marker-active');
-            currentActiveMarkerElement = marker.element;
-        }
-
-        if (infoWindow.setHeaderContent) {
-            // Always use Park Name (with Region) as the main header
-            infoWindow.setHeaderContent(primaryLoc.park || "Location");
-        }
-
-        infoWindow.setContent(content);
-        infoWindow.open({
-            anchor: marker,
-            map,
-        });
-
-        // Automatically load the target hike's path initially
-        handleHikeClick(targetHike);
-    };
-
     const renderData = (filterType) => {
         // Close info window and clear paths if filter changes
         infoWindow.close();
@@ -388,16 +330,75 @@ async function initMap() {
 
             currentMarkers.push(marker);
 
+            const openInfoWindowForHike = (targetHike) => {
+                // Function to handle clicking on a specific hike in the list
+                const handleHikeClick = async (hike) => {
+                    const yyyymmdd = formatDateAsYYYYMMDD(hike.date);
+                    if (yyyymmdd) {
+                        // Update URL fragment
+                        history.replaceState(null, null, '#' + yyyymmdd);
+                    }
+
+                    const gpxUrl = getGPXFilename(hike.date);
+                    if (gpxUrl) {
+                        // Clear existing
+                        if (currentPolyline) {
+                            currentPolyline.setMap(null);
+                            currentPolyline = null;
+                        }
+
+                        const pathData = await loadGPX(gpxUrl);
+                        if (pathData && pathData.length > 0) {
+                            currentPolyline = new google.maps.Polyline({
+                                path: pathData,
+                                geodesic: true,
+                                strokeColor: "#1E90FF",
+                                strokeOpacity: 0.75,
+                                strokeWeight: 4,
+                                map: map
+                            });
+                        }
+                    }
+                };
+
+                // Pass ALL hikes for this location to the info window builder
+                // AND pass the click handler
+                const content = buildInfoWindowContent(hikes, handleHikeClick);
+
+                // Deactivate previous
+                deactivateCurrentMarker();
+
+                // Activate current
+                if (marker.element) {
+                    marker.element.classList.add('marker-active');
+                    currentActiveMarkerElement = marker.element;
+                }
+
+                if (infoWindow.setHeaderContent) {
+                    // Always use Park Name (with Region) as the main header
+                    infoWindow.setHeaderContent(primaryLoc.park || "Location");
+                }
+
+                infoWindow.setContent(content);
+                infoWindow.open({
+                    anchor: marker,
+                    map,
+                });
+
+                // Automatically load the target hike's path initially
+                handleHikeClick(targetHike);
+            };
+
             // Add click listener
             marker.addListener('click', async () => {
-                openInfoWindowForHike(primaryLoc, hikes, marker, primaryLoc);
+                openInfoWindowForHike(primaryLoc);
             });
 
             hikes.forEach(hike => {
                 const yyyymmdd = formatDateAsYYYYMMDD(hike.date);
                 if (yyyymmdd) {
                     dateToMarkerInfo[yyyymmdd] = {
-                        open: () => openInfoWindowForHike(hike, hikes, marker, primaryLoc),
+                        open: () => openInfoWindowForHike(hike),
                         hike: hike
                     };
                 }
@@ -530,6 +531,10 @@ function buildMarkerContent(data) {
 }
 
 
+/**
+ * Builds the HTML for the InfoWindow popup
+ * Now accepts an array of hike objects
+ */
 /**
  * Builds the HTML for the InfoWindow popup
  * Now accepts an array of hike objects and a callback for clicks
