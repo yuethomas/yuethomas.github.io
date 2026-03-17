@@ -70,7 +70,8 @@ function parseSheetData(table) {
         trail: "trail",
         region: "region",
         elevation: "elevation",
-        pace: "pace"
+        pace: "pace",
+        type: "type"
     };
 
     // Find header row index and column indices
@@ -89,6 +90,7 @@ function parseSheetData(table) {
         else if (s.includes(headers.region)) colIndices.region = index;
         else if (s.includes(headers.elevation)) colIndices.elevation = index;
         else if (s.includes(headers.pace)) colIndices.pace = index;
+        else if (s.includes(headers.type)) colIndices.type = index;
     };
 
     // Check table.cols for labels first
@@ -158,6 +160,7 @@ function parseSheetData(table) {
         const region = getString(colIndices.region);
         const elevation = getVal(colIndices.elevation);
         const pace = getVal(colIndices.pace);
+        const type = getString(colIndices.type).toLowerCase().includes('bike') ? 'bike' : 'hike';
 
         // Combine Park and Region
         const park = region ? `${parkRaw} (${region})` : parkRaw;
@@ -210,7 +213,8 @@ function parseSheetData(table) {
             trail: trail,
             elevation: formattedElevation,
             pace: formattedPace,
-            rawDate: rawDate
+            rawDate: rawDate,
+            type: type
         });
     });
 
@@ -462,10 +466,12 @@ function buildMarkerContent(data) {
     const container = document.createElement("div");
     container.className = "custom-marker";
 
+    const emoji = data && data.type === 'bike' ? '🚴🏽‍♂️' : '🚶🏽‍♂️';
+
     // Only showing emoji on the marker itself
     container.innerHTML = `
         <div class="marker-content">
-            🚶
+            ${emoji}
         </div>
     `;
 
@@ -518,7 +524,8 @@ function buildInfoWindowContent(data, onHikeClick) {
         let html = '';
 
         // Date is now the primary label for each hike entry
-        html += `<div style="font-weight: 700; color: var(--text-color); margin-bottom: 4px;">${hike.date}</div>`;
+        const typeEmoji = hike.type === 'bike' ? '🚴' : '🚶';
+        html += `<div style="font-weight: 700; color: var(--text-color); margin-bottom: 4px;">${typeEmoji} ${hike.date}</div>`;
 
         // Trail Name (always show if exists)
         if (hike.trail) {
