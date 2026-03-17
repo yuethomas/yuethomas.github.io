@@ -238,7 +238,7 @@ async function initMap() {
         center: center,
         zoom: 11,
         mapId: "4504f8b37365c3d0",
-        colorScheme: "FOLLOW_SYSTEM", // Use string literal due to import issue with ColorScheme
+        colorScheme: "DARK", // Always use dark map theme
         disableDefaultUI: false,
         zoomControl: true,
         mapTypeControl: true,

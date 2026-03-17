@@ -1,45 +1,29 @@
 :root {
+    --text-color: #f1f5f9;
+    /* Slate 100 */
+    --secondary-text: #94a3b8;
+    /* Slate 400 */
+    --bg-color: #0f172a;
+    /* Slate 900 */
+    --card-bg: rgba(30, 41, 59, 0.75);
+    /* More translucent for glass effect */
+    --border-color: #334155;
+    /* Slate 700 */
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
     --primary-color: #3b82f6;
     /* Blue 500 */
-    --text-color: #1e293b;
-    /* Slate 800 */
-    --secondary-text: #64748b;
-    /* Slate 500 */
-    --bg-color: #f8fafc;
-    /* Slate 50 */
-    --card-bg: rgba(255, 255, 255, 0.75);
-    /* More translucent for glass effect */
-    --border-color: #e2e8f0;
-    /* Slate 200 */
-    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --text-color: #f1f5f9;
-        /* Slate 100 */
-        --secondary-text: #94a3b8;
-        /* Slate 400 */
-        --bg-color: #0f172a;
-        /* Slate 900 */
-        --card-bg: rgba(30, 41, 59, 0.75);
-        /* More translucent for glass effect */
-        --border-color: #334155;
-        /* Slate 700 */
-        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
-    }
+/* Invert close button to make it white in dark mode */
+.gm-style button.gm-ui-hover-effect {
+    filter: invert(1) !important;
+}
 
-    /* Invert close button to make it white in dark mode */
-    .gm-style button.gm-ui-hover-effect {
-        filter: invert(1) !important;
-    }
-
-    /* Ensure native header (Date) and content text colors are correct */
-    .gm-style .gm-style-iw-d {
-        color: var(--text-color) !important;
-        overflow: hidden !important;
-        /* Hide scrollbars */
-    }
+/* Ensure native header (Date) and content text colors are correct */
+.gm-style .gm-style-iw-d {
+    color: var(--text-color) !important;
+    overflow: hidden !important;
+    /* Hide scrollbars */
 }
 
 /* Global Glassmorphism for InfoWindow (Light & Dark) */
@@ -79,7 +63,7 @@ body {
 /* Filter Control Styles */
 #filter-container {
     position: absolute;
-    top: 20px;
+    bottom: 30px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 1000;
@@ -109,13 +93,7 @@ body {
 
 .filter-btn:hover {
     color: var(--text-color);
-    background-color: rgba(0, 0, 0, 0.05);
-}
-
-@media (prefers-color-scheme: dark) {
-    .filter-btn:hover {
-        background-color: rgba(255, 255, 255, 0.05);
-    }
+    background-color: rgba(255, 255, 255, 0.05);
 }
 
 .filter-btn.active {
