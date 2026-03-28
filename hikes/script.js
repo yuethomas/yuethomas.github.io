@@ -1,4 +1,38 @@
 let map;
+let infoWindow;
+let currentPolyline = [];
+let currentActiveMarkerElement = null;
+let currentMarkers = [];
+let allLocations = [];
+let dateToMarkerInfo = {};
+
+const clearCurrentPolyline = () => {
+    currentPolyline.forEach(p => p.setMap(null));
+    currentPolyline = [];
+};
+
+const createStyledPolyline = (pathData, color, opacity, weight, zIndex) => {
+    return new google.maps.Polyline({
+        path: pathData,
+        geodesic: true,
+        strokeColor: color,
+        strokeOpacity: opacity,
+        strokeWeight: weight,
+        zIndex: zIndex,
+        map: map
+    });
+};
+
+const deactivateCurrentMarker = () => {
+    if (currentActiveMarkerElement) {
+        currentActiveMarkerElement.classList.remove('marker-active');
+        currentActiveMarkerElement = null;
+    }
+    clearCurrentPolyline();
+    
+    // Remove the URL fragment when no hike is selected
+    history.replaceState(null, null, window.location.pathname + window.location.search);
+};
 
 /**
  * Fetches data from Google Sheets using JSONP to avoid CORS issues
@@ -225,7 +259,7 @@ function parseSheetData(table) {
 
 async function initMap() {
     // Fetch data first
-    const locations = await fetchSheetData();
+    allLocations = await fetchSheetData();
 
     // Request needed libraries.
     const { Map, InfoWindow } = await google.maps.importLibrary("maps");
@@ -248,22 +282,7 @@ async function initMap() {
         mapTypeId: 'terrain',
     });
 
-    const infoWindow = new InfoWindow();
-
-    // Track currently displayed polyline
-    let currentPolyline = null;
-    let currentActiveMarkerElement = null;
-
-    const deactivateCurrentMarker = () => {
-        if (currentActiveMarkerElement) {
-            currentActiveMarkerElement.classList.remove('marker-active');
-            currentActiveMarkerElement = null;
-        }
-        if (currentPolyline) {
-            currentPolyline.setMap(null);
-            currentPolyline = null;
-        }
-    };
+    infoWindow = new InfoWindow();
 
     // Close InfoWindow and deselect marker when clicking the map
     map.addListener('click', () => {
@@ -275,9 +294,6 @@ async function initMap() {
     infoWindow.addListener('closeclick', () => {
         deactivateCurrentMarker();
     });
-
-    let currentMarkers = [];
-    const dateToMarkerInfo = {};
 
     const renderData = (filterType) => {
         // Close info window and clear paths if filter changes
@@ -294,7 +310,7 @@ async function initMap() {
         }
 
         // Filter locations based on type
-        const filteredLocations = filterType === 'all' ? locations : locations.filter(loc => loc.type === filterType);
+        const filteredLocations = filterType === 'all' ? allLocations : allLocations.filter(loc => loc.type === filterType);
 
         // Group filtered locations by lat/lng to combine multiple hikes at same trailhead
         const groupedLocations = {};
@@ -326,6 +342,7 @@ async function initMap() {
                 position: { lat: primaryLoc.lat, lng: primaryLoc.lng },
                 content: markerContent,
                 title: primaryLoc.park || primaryLoc.title,
+                zIndex: 100,
             });
 
             currentMarkers.push(marker);
@@ -341,22 +358,16 @@ async function initMap() {
 
                     const gpxUrl = getGPXFilename(hike.date);
                     if (gpxUrl) {
-                        // Clear existing
-                        if (currentPolyline) {
-                            currentPolyline.setMap(null);
-                            currentPolyline = null;
-                        }
+                        clearCurrentPolyline();
 
                         const pathData = await loadGPX(gpxUrl);
                         if (pathData && pathData.length > 0) {
-                            currentPolyline = new google.maps.Polyline({
-                                path: pathData,
-                                geodesic: true,
-                                strokeColor: "#1E90FF",
-                                strokeOpacity: 0.75,
-                                strokeWeight: 4,
-                                map: map
-                            });
+                            // Layered polyline for a premium "glow" and "casing" effect
+                            currentPolyline = [
+                                createStyledPolyline(pathData, "#ffffff", 0.15, 10, 1), // Glow
+                                createStyledPolyline(pathData, "#000000", 0.5, 5, 2),   // Outline
+                                createStyledPolyline(pathData, "#00E5FF", 1.0, 3, 3)    // Core
+                            ];
                         }
                     }
                 };
@@ -426,7 +437,7 @@ async function initMap() {
 
     if (hash) {
         // Find the hike with this date to see if we need to set the filter to something else
-        const targetHike = locations.find(loc => formatDateAsYYYYMMDD(loc.date) === hash);
+        const targetHike = allLocations.find(loc => formatDateAsYYYYMMDD(loc.date) === hash);
         if (targetHike && targetHike.type) {
              initialFilter = targetHike.type;
              // Also update active button state
