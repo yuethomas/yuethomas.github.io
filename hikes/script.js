@@ -32,6 +32,13 @@ const deactivateCurrentMarker = () => {
     
     // Remove the URL fragment when no hike is selected
     history.replaceState(null, null, window.location.pathname + window.location.search);
+    
+    // Clean up drag events if they exist
+    if (infoWindow && infoWindow.dragCleanup) {
+        infoWindow.dragCleanup();
+        infoWindow.dragCleanup = null;
+    }
+    document.body.classList.remove('infowindow-dragged');
 };
 
 /**
@@ -325,6 +332,11 @@ async function initMap() {
         Object.values(groupedLocations).forEach((hikes) => {
             // Sort hikes by date descending (newest first)
             hikes.sort((a, b) => {
+                const dateA = new Date(a.date).getTime();
+                const dateB = new Date(b.date).getTime();
+                if (!isNaN(dateA) && !isNaN(dateB)) {
+                    return dateB - dateA;
+                }
                 if (typeof a.rawDate === 'number' && typeof b.rawDate === 'number') {
                     return b.rawDate - a.rawDate;
                 }
@@ -374,7 +386,7 @@ async function initMap() {
 
                 // Pass ALL hikes for this location to the info window builder
                 // AND pass the click handler
-                const content = buildInfoWindowContent(hikes, handleHikeClick);
+                const content = buildInfoWindowContent(hikes, handleHikeClick, targetHike);
 
                 // Deactivate previous
                 deactivateCurrentMarker();
@@ -386,8 +398,105 @@ async function initMap() {
                 }
 
                 if (infoWindow.setHeaderContent) {
-                    // Always use Park Name (with Region) as the main header
-                    infoWindow.setHeaderContent(primaryLoc.park || "Location");
+                    // Create a draggable header
+                    const headerDiv = document.createElement('div');
+                    headerDiv.style.cursor = 'grab';
+                    headerDiv.style.userSelect = 'none'; // Prevent text selection drag
+                    headerDiv.style.touchAction = 'none'; // Prevent touch panning while dragging
+                    // Set font styles to match info window header natively
+                    headerDiv.style.fontSize = '1.05rem';
+                    headerDiv.style.fontWeight = '600';
+                    headerDiv.style.padding = '2px 0';
+                    headerDiv.style.marginLeft = '4px';
+
+                    headerDiv.textContent = primaryLoc.park || "Location";
+
+                    // Reset offset whenever opening
+                    infoWindow.setOptions({ pixelOffset: new google.maps.Size(0, 0) });
+                    document.body.classList.remove('infowindow-dragged');
+
+                    let isDragging = false;
+                    let startX, startY;
+                    let currentOffsetX = 0;
+                    let currentOffsetY = 0;
+
+                    headerDiv.addEventListener('mousedown', (e) => {
+                        isDragging = true;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        headerDiv.style.cursor = 'grabbing';
+                        e.stopPropagation(); 
+                        e.preventDefault(); // Prevent native text dragging
+                    });
+
+                    headerDiv.addEventListener('touchstart', (e) => {
+                        if (e.touches.length === 1) {
+                            isDragging = true;
+                            startX = e.touches[0].clientX;
+                            startY = e.touches[0].clientY;
+                            e.stopPropagation();
+                        }
+                    }, { passive: false });
+
+                    const onMouseMove = (e) => {
+                        if (!isDragging) return;
+                        // Support both mouse and touch events
+                        const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+                        const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+                        
+                        if (clientX === undefined || clientY === undefined) return;
+
+                        const dx = clientX - startX;
+                        const dy = clientY - startY;
+                        
+                        currentOffsetX += dx;
+                        currentOffsetY += dy;
+
+                        startX = clientX;
+                        startY = clientY;
+
+                        // Hide tail once we have begun moving
+                        if (Math.abs(currentOffsetX) > 2 || Math.abs(currentOffsetY) > 2) {
+                            document.body.classList.add('infowindow-dragged');
+                        }
+
+                        // Dynamically update info window offset
+                        infoWindow.setOptions({
+                            pixelOffset: new google.maps.Size(currentOffsetX, currentOffsetY)
+                        });
+                    };
+
+                    const onMouseUp = () => {
+                        if (isDragging) {
+                            isDragging = false;
+                            headerDiv.style.cursor = 'grab';
+                        }
+                    };
+
+                    // Only set up one cleanup
+                    if (infoWindow.dragCleanup) {
+                        infoWindow.dragCleanup();
+                    }
+
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                    document.addEventListener('touchmove', onMouseMove, { passive: false });
+                    document.addEventListener('touchend', onMouseUp);
+
+                    infoWindow.dragCleanup = () => {
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                        document.removeEventListener('touchmove', onMouseMove);
+                        document.removeEventListener('touchend', onMouseUp);
+                    };
+
+                    // Prevent click from bubbling and closing the window or causing a map click
+                    headerDiv.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                    });
+
+                    infoWindow.setHeaderContent(headerDiv);
                 }
 
                 infoWindow.setContent(content);
@@ -544,15 +653,12 @@ function buildMarkerContent(data) {
 
 /**
  * Builds the HTML for the InfoWindow popup
- * Now accepts an array of hike objects
- */
-/**
- * Builds the HTML for the InfoWindow popup
  * Now accepts an array of hike objects and a callback for clicks
  */
-function buildInfoWindowContent(data, onHikeClick) {
+function buildInfoWindowContent(data, onHikeClick, targetHike) {
     // Ensure data is an array
     const hikes = Array.isArray(data) ? data : [data];
+    const hasMultiple = hikes.length > 1;
 
     const div = document.createElement('div');
     div.className = 'info-window-content';
@@ -569,6 +675,12 @@ function buildInfoWindowContent(data, onHikeClick) {
             entryDiv.style.paddingTop = "12px";
         }
 
+        const isSelected = targetHike ? hike === targetHike : index === 0;
+
+        if (isSelected && onHikeClick) {
+            entryDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+        }
+
         // Add click listener if callback provided
         if (onHikeClick) {
             entryDiv.style.cursor = "pointer";
@@ -579,8 +691,18 @@ function buildInfoWindowContent(data, onHikeClick) {
 
                 // Visual feedback - highlight selected
                 const allEntries = div.querySelectorAll('.hike-entry');
-                allEntries.forEach(el => el.style.backgroundColor = 'transparent');
+                allEntries.forEach(el => {
+                    el.style.backgroundColor = 'transparent';
+                    if (hasMultiple) {
+                        const stats = el.querySelector('.info-stats');
+                        if (stats) stats.style.display = 'none';
+                    }
+                });
                 entryDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                if (hasMultiple) {
+                    const myStats = entryDiv.querySelector('.info-stats');
+                    if (myStats) myStats.style.display = 'grid';
+                }
             });
         }
 
@@ -596,8 +718,9 @@ function buildInfoWindowContent(data, onHikeClick) {
         }
 
         // Stats Grid
+        const displayStyle = (!hasMultiple || isSelected) ? 'grid' : 'none';
         html += `
-            <div class="info-stats">
+            <div class="info-stats" style="display: ${displayStyle};">
                 <div class="info-stat">
                     <strong>Duration:</strong> 
                     <span>${hike.duration}</span>
