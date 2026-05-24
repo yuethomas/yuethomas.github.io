@@ -29,10 +29,10 @@ const deactivateCurrentMarker = () => {
         currentActiveMarkerElement = null;
     }
     clearCurrentPolyline();
-    
+
     // Remove the URL fragment when no hike is selected
     history.replaceState(null, null, window.location.pathname + window.location.search);
-    
+
     // Clean up drag events if they exist
     if (infoWindow && infoWindow.dragCleanup) {
         infoWindow.dragCleanup();
@@ -255,7 +255,12 @@ function parseSheetData(table) {
             elevation: formattedElevation,
             pace: formattedPace,
             rawDate: rawDate,
-            type: type
+            type: type,
+            rawHours: hours,
+            rawMinutes: minutes,
+            rawDistance: distanceVal,
+            rawElevation: elevation,
+            rawPace: pace
         });
     });
 
@@ -313,7 +318,7 @@ async function initMap() {
 
         // Clear dateToMarkerInfo map
         for (const prop of Object.getOwnPropertyNames(dateToMarkerInfo)) {
-             delete dateToMarkerInfo[prop];
+            delete dateToMarkerInfo[prop];
         }
 
         // Filter locations based on type
@@ -425,7 +430,7 @@ async function initMap() {
                         startX = e.clientX;
                         startY = e.clientY;
                         headerDiv.style.cursor = 'grabbing';
-                        e.stopPropagation(); 
+                        e.stopPropagation();
                         e.preventDefault(); // Prevent native text dragging
                     });
 
@@ -443,12 +448,12 @@ async function initMap() {
                         // Support both mouse and touch events
                         const clientX = e.clientX ?? e.touches?.[0]?.clientX;
                         const clientY = e.clientY ?? e.touches?.[0]?.clientY;
-                        
+
                         if (clientX === undefined || clientY === undefined) return;
 
                         const dx = clientX - startX;
                         const dy = clientY - startY;
-                        
+
                         currentOffsetX += dx;
                         currentOffsetY += dy;
 
@@ -548,11 +553,11 @@ async function initMap() {
         // Find the hike with this date to see if we need to set the filter to something else
         const targetHike = allLocations.find(loc => formatDateAsYYYYMMDD(loc.date) === hash);
         if (targetHike && targetHike.type) {
-             initialFilter = targetHike.type;
-             // Also update active button state
-             filterButtons.forEach(b => b.classList.remove('active'));
-             const matchingBtn = document.querySelector(`.filter-btn[data-type="${initialFilter}"]`);
-             if (matchingBtn) matchingBtn.classList.add('active');
+            initialFilter = targetHike.type;
+            // Also update active button state
+            filterButtons.forEach(b => b.classList.remove('active'));
+            const matchingBtn = document.querySelector(`.filter-btn[data-type="${initialFilter}"]`);
+            if (matchingBtn) matchingBtn.classList.add('active');
         }
     }
 
@@ -677,10 +682,6 @@ function buildInfoWindowContent(data, onHikeClick, targetHike) {
 
         const isSelected = targetHike ? hike === targetHike : index === 0;
 
-        if (isSelected && onHikeClick) {
-            entryDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
-        }
-
         // Add click listener if callback provided
         if (onHikeClick) {
             entryDiv.style.cursor = "pointer";
@@ -719,26 +720,51 @@ function buildInfoWindowContent(data, onHikeClick, targetHike) {
 
         // Stats Grid
         const displayStyle = (!hasMultiple || isSelected) ? 'grid' : 'none';
-        html += `
-            <div class="info-stats" style="display: ${displayStyle};">
-                <div class="info-stat">
-                    <strong>Duration:</strong> 
-                    <span>${hike.duration}</span>
-                </div>
-                <div class="info-stat">
-                    <strong>Dist:</strong> 
-                    <span>${hike.distance}</span>
-                </div>
-                <div class="info-stat">
-                    <strong>Elev:</strong> 
-                    <span>${hike.elevation}</span>
-                </div>
-                <div class="info-stat">
-                    <strong>Pace:</strong> 
-                    <span>${hike.pace}</span>
-                </div>
-            </div>
-        `;
+
+        const isNonZero = (val) => {
+            if (val === undefined || val === null) return false;
+            if (typeof val === 'number') return val !== 0;
+            const num = parseFloat(val);
+            return !isNaN(num) && num !== 0;
+        };
+
+        const hasDuration = isNonZero(hike.rawHours) || isNonZero(hike.rawMinutes);
+        const hasDistance = isNonZero(hike.rawDistance);
+        const hasElevation = isNonZero(hike.rawElevation);
+        const hasPace = isNonZero(hike.rawPace);
+
+        if (hasDuration || hasDistance || hasElevation || hasPace) {
+            html += `<div class="info-stats" style="display: ${displayStyle};">`;
+            if (hasDuration) {
+                html += `
+                    <div class="info-stat">
+                        <strong>Duration:</strong> 
+                        <span>${hike.duration}</span>
+                    </div>`;
+            }
+            if (hasDistance) {
+                html += `
+                    <div class="info-stat">
+                        <strong>Dist:</strong> 
+                        <span>${hike.distance}</span>
+                    </div>`;
+            }
+            if (hasElevation) {
+                html += `
+                    <div class="info-stat">
+                        <strong>Elev:</strong> 
+                        <span>${hike.elevation}</span>
+                    </div>`;
+            }
+            if (hasPace) {
+                html += `
+                    <div class="info-stat">
+                        <strong>Pace:</strong> 
+                        <span>${hike.pace}</span>
+                    </div>`;
+            }
+            html += `</div>`;
+        }
 
         entryDiv.innerHTML = html;
         div.appendChild(entryDiv);
